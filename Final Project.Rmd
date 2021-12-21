@@ -1,0 +1,277 @@
+---
+title: "Machine Learning Applications In Predicting Life Expectancy And A Nation's Development Status"
+author: "Tristan Luu"
+date: "12/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+setwd("D:/Denison/Fall 2021/DA 350/Final Project")
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(ggfortify)
+library(cluster)
+library(factoextra)
+library(tidyverse)
+library(rmarkdown)
+library(knitr)
+library(car)
+library(rms)
+library(GGally)
+library(corrplot)
+library(tree)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(ROSE)
+library(InformationValue)
+library(ggstatsplot)
+data <- read.csv("Life Expectancy Data.csv")
+```
+
+# Exploratory 
+
+```{r}
+summary(data)
+str(data)
+```
+
+```{r}
+data$Adult.Mortality <- as.numeric(as.character(data$Adult.Mortality))
+data$infant.deaths <- as.numeric(as.character(data$infant.deaths))
+data$Hepatitis.B <- as.numeric(as.character(data$Hepatitis.B))
+data$Measles <- as.numeric(as.character(data$Measles))
+data$under.five.deaths <- as.numeric(as.character(data$under.five.deaths))
+data$Polio <- as.numeric(as.character(data$Polio))
+data$Diphtheria <- as.numeric(as.character(data$Diphtheria))
+```
+
+```{r message=FALSE, warning=FALSE}
+#Correlation matrix
+
+data.corr = cor(data[,c(-1,-2,-3)], use = "complete.obs")
+palette = colorRampPalette(c("blue", "white", "red")) (20)
+corrplot(data.corr, method='color', col = palette)
+#heatmap(x = data.corr, col = palette, symm = TRUE)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Distribution of Life.expectancy variable
+
+data %>%
+  ggplot(aes(Life.expectancy))+
+  geom_histogram(bins = 30, col = "blue", fill = "sky blue")+
+  labs(title="Distribution of Life Expectancy variable")+
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+```{r}
+#Split the data into training and test set (80/20 ratio)
+
+set.seed(1)
+
+n = nrow(data)
+index <- sample(1:n, size = n*0.8 )
+train <- data[index,]
+test <- data[-index,]
+```
+
+# Predicting Life Expectancy Of Countries Around The World Using Fixed Effect Linear Regression
+
+```{r}
+#Choose "Year" to be the fixed effect
+
+train1 <- train[,c(-1,-3)]
+test1 <- test[,c(-1,-3)]
+train1$Year <- as.factor(train1$Year)
+test1$Year <- as.factor(test1$Year)
+```
+
+```{r message=FALSE, warning=FALSE}
+linear1 <- lm(Life.expectancy ~., train1)
+summary(linear1)
+```
+
+```{r message=FALSE, warning=FALSE}
+linear2 <- lm(Life.expectancy ~ Year + Adult.Mortality + infant.deaths + Alcohol + percentage.expenditure + Measles + BMI + under.five.deaths + Total.expenditure + Diphtheria + HIV.AIDS + thinness.5.9.years + Income.composition.of.resources + Schooling, train1)
+summary(linear2)
+```
+
+```{r message=FALSE, warning=FALSE}
+linear3 <- lm(Life.expectancy ~ Year + Adult.Mortality + infant.deaths + percentage.expenditure + BMI + under.five.deaths + Diphtheria + HIV.AIDS + thinness.5.9.years + Income.composition.of.resources + Schooling, train1)
+summary(linear3)
+```
+
+```{r message=FALSE, warning=FALSE}
+#Final model
+
+linear4<- lm(Life.expectancy ~ Year + Adult.Mortality + percentage.expenditure + BMI + under.five.deaths + Diphtheria + HIV.AIDS + Income.composition.of.resources + Schooling, train1)
+summary(linear4)
+```
+
+```{r message=FALSE, warning=FALSE}
+autoplot(linear4)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Residual histogram
+
+residuals = resid(linear4)
+
+linear4 %>%
+  ggplot(aes(residuals))+
+  geom_histogram(bins = 30, col = "blue", fill = "sky blue")+
+  labs(title="Residual histogram")+
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#Normality test
+
+shapiro.test(linear4$residuals)
+```
+
+```{r}
+#Homoscedasticity test
+
+ncvTest(linear4)
+```
+
+```{r}
+#Calculate the test MSE
+
+test1 <-na.omit(test1)
+pred_linear <- predict(linear4,test1)
+
+mse=function(actual, predicted){
+  return(mean((actual-predicted)^2))
+}
+
+mse(test1$Life.expectancy,pred_linear)
+```
+
+
+# Classifying A Nation's Status (A Developing Or Developed Country) By Using A Parametric (Logistic Regression) And A Non-parametric (Decision Tree) Algorithm
+
+```{r}
+train2 <- train[,c(-1,-2)]
+test2 <- test[,c(-1,-2)]
+```
+
+## Decision Tree
+
+```{r message=FALSE, warning=FALSE}
+tree1 <- rpart(Status ~., train2)
+rpart.plot(tree1)
+```
+
+
+```{r}
+#Prediction
+
+test2 <- na.omit(test2)
+y_pred1 = predict(tree1, 
+                 type = 'class', 
+                 newdata = test2[-1])
+
+```
+
+```{r}
+#Calculate the accuracy based on confusion matrix
+
+matrix1 = table(test2[, 1], y_pred1)
+matrix1
+
+accuracy1 <- sum(diag(matrix1)) / sum(matrix1)
+accuracy1
+```
+
+```{r message=FALSE, warning=FALSE}
+#AUC and ROC
+
+roc.curve(test2$Status, y_pred1)
+```
+
+## Logistic Regression
+
+```{r}
+train2$Status <- ifelse(train2$Status == "Developed", 1, 0)
+test2$Status <- ifelse(test2$Status == "Developed", 1, 0)
+```
+
+```{r message=FALSE, warning=FALSE}
+logistic1 <- glm(Status~., train2, family= binomial)
+summary(logistic1)
+```
+
+```{r message=FALSE, warning=FALSE}
+logistic2 <- glm(Status~ Adult.Mortality + Alcohol + Hepatitis.B + under.five.deaths + thinness..1.19.years + thinness.5.9.years + Income.composition.of.resources, train2, family= binomial)
+summary(logistic2)
+lrm(Status~ Adult.Mortality + Alcohol + Hepatitis.B + under.five.deaths + thinness..1.19.years + thinness.5.9.years + Income.composition.of.resources, train2, maxit=100)
+```
+
+```{r message=FALSE, warning=FALSE}
+logistic3 <- glm(Status~ Alcohol + Hepatitis.B + under.five.deaths + thinness..1.19.years + thinness.5.9.years + Income.composition.of.resources, train2, family= binomial)
+summary(logistic3)
+lrm(Status~ Alcohol + Hepatitis.B + under.five.deaths + thinness..1.19.years + thinness.5.9.years + Income.composition.of.resources, train2, maxit=100)
+```
+
+```{r}
+#Interaction term because thinness..1.19.years and thinness.5.9.years are highly correlated
+
+train2$thinness = train2$thinness..1.19.years*train2$thinness.5.9.years
+test2$thinness = test2$thinness..1.19.years*test2$thinness.5.9.years
+```
+
+```{r message=FALSE, warning=FALSE}
+#Final model
+
+logistic4 <- glm(Status~ Alcohol + Hepatitis.B + under.five.deaths + thinness + Income.composition.of.resources, train2, family= binomial)
+summary(logistic4)
+lrm(Status~ Alcohol + Hepatitis.B + under.five.deaths + thinness + Income.composition.of.resources, train2, maxit=100)
+```
+
+```{r}
+#Cut Off Point
+
+test2 <- na.omit(test2)
+prob_pred <- predict(logistic4, 
+                    type = 'response', 
+                    newdata = test2[-1])
+
+
+optCutOff <- optimalCutoff(test2$Status, prob_pred)[1]
+optCutOff
+y_pred2 = ifelse(prob_pred > optCutOff, 1, 0)
+```
+
+```{r}
+#Calculate the accuracy based on confusion matrix
+
+matrix2 = table(test2[, 1], y_pred2)
+matrix2
+
+accuracy2 <- sum(diag(matrix2)) / sum(matrix2)
+accuracy2
+```
+
+```{r message=FALSE, warning=FALSE}
+#AUC and ROC
+
+par(mfrow = c(1, 1))
+roc.curve(test2$Status, y_pred2)
+```
+
+
+
+
+
+
+
+
+
