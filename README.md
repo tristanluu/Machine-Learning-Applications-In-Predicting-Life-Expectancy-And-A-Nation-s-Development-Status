@@ -1,0 +1,2 @@
+# Machine-Learning-Applications-In-Predicting-Life-Expectancy-And-A-Nation-s-Development-Status
+This project is divided into two parts. Firstly, I use linear regression, with year as the fixed effect, to predict the life expectancy of different nations. In the second part, I use two machine learning methods, decision tree and logistic regression, to classify whether a country is a developed or developing nation. After comparing the results, I conclude that decision tree performs slightly better than logistic regression in this scenario.
